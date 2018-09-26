@@ -7,6 +7,7 @@ import java.util.Map;
 
 import game.HawkDoveGame;
 import jadex.bridge.IComponentIdentifier;
+import jadex.bridge.IComponentStep;
 import jadex.bridge.IInternalAccess;
 import jadex.bridge.component.IMessageFeature;
 import jadex.bridge.fipa.SFipa;
@@ -14,6 +15,7 @@ import jadex.bridge.service.RequiredServiceInfo;
 import jadex.bridge.service.search.SServiceProvider;
 import jadex.bridge.service.types.cms.IComponentManagementService;
 import jadex.bridge.service.types.message.MessageType;
+import jadex.commons.future.IFuture;
 import jadex.commons.future.ThreadSuspendable;
 import jadex.micro.annotation.Agent;
 import jadex.micro.annotation.AgentArgument;
@@ -36,6 +38,7 @@ public class ManagerBDI {
 	private static IComponentManagementService cms;
 	private int max_generations = 1000;
 	private int curr_generation = 0;
+	private boolean debug = false;
 
 	@AgentArgument
 	private int agQty;
@@ -52,8 +55,15 @@ public class ManagerBDI {
 		done = new boolean[agQty];
 		addresses = new IComponentIdentifier[agQty];
 		startHawkDove50_50();
+		start();
+	}
+
+	public void start() {
+		waitFor(1500);
+		printMessage("Gen: " + curr_generation);
 		shuffleEncounters();
 		sendMessages();
+
 	}
 
 	public void startHawkDove50_50() {
@@ -105,34 +115,56 @@ public class ManagerBDI {
 
 			IComponentIdentifier p1_AID = addresses[p1];
 			IComponentIdentifier p2_AID = addresses[p2];
-			if (addresses[p1] == null || addresses[p2] == null) {
+			while (addresses[p1] == null || addresses[p2] == null) {
+				waitFor(1500);
+
 				p1_AID = df.getAgentAID(createName(AgentBDI.class.getName(), p1));
 				addresses[p1] = p1_AID;
 				p2_AID = df.getAgentAID(createName(AgentBDI.class.getName(), p2));
 				addresses[p2] = p2_AID;
 			}
+			if (p1 > p2) {
+				int temp = p2;
+				p2 = p1;
+				p1 = temp;
+				IComponentIdentifier tempAID = p2_AID;
+				p1_AID = p2_AID;
+				p2_AID = tempAID;
+			}
 			Map<String, Object> msg = new HashMap<>();
 			msg.put(SFipa.CONTENT, p1 + "x" + p2);
 			msg.put(SFipa.PERFORMATIVE, SFipa.INFORM);
-			msg.put(SFipa.RECEIVERS, new IComponentIdentifier[] { p1_AID, p2_AID });
+			msg.put(SFipa.RECEIVERS, new IComponentIdentifier[] { p1_AID });
 			msg.put(SFipa.SENDER, agent.getComponentIdentifier());
 
 			agent.getComponentFeature(IMessageFeature.class).sendMessage(msg, SFipa.FIPA_MESSAGE_TYPE);
+			printMessage("Sent INFORM message to " + p1_AID);
+			done[p1] = false;
+			done[p2] = false;
 		}
-		System.out.println(String.format("%s\t%s\t%s", curr_generation, typeHawk, typeDove));
-		Map<String, Object> msg = new HashMap<>();
-		msg.put(SFipa.CONTENT, "GO!");
-		msg.put(SFipa.PERFORMATIVE, SFipa.REQUEST);
-		msg.put(SFipa.RECEIVERS, addresses);
-		msg.put(SFipa.SENDER, agent.getComponentIdentifier());
-		agent.getComponentFeature(IMessageFeature.class).sendMessage(msg, SFipa.FIPA_MESSAGE_TYPE);
+		printMessage(String.format("%s\t%s\t%s", curr_generation, typeHawk, typeDove), true);
 		return;
 
 	}
 
 	@AgentMessageArrived
-	private void messageArrived(Map<String, Object> msg, MessageType mt) {
-		//TODO aqui parei
+	private synchronized void messageArrived(Map<String, Object> msg, MessageType mt) {
+		printMessage("Received INFORM message from " + msg.get(SFipa.SENDER).toString());
+		String content[] = msg.get(SFipa.CONTENT).toString().split(" ");
+		int curr_index = Integer.parseInt(content[0]);
+		int curr_type = Integer.parseInt(content[1]);
+		done[curr_index] = true;
+		type[curr_index] = curr_type;
+		Boolean all_done = true;
+		for (int i = 0; i < agQty; i++) {
+			all_done = all_done && done[i];
+		}
+		if (all_done) {
+			printMessage("Ending this gen");
+			curr_generation++;
+			start();
+		}
+		return;
 	}
 
 	// TODO create super class with this
@@ -143,6 +175,28 @@ public class ManagerBDI {
 	protected void registerSelf(String name, IComponentIdentifier identifier) {
 		df = DirectoryFacilitator.getInstance();
 		df.registerAgent(name, identifier);
+	}
+
+	protected synchronized void printMessage(String message) {
+		if (debug) {
+			System.out.println(agentName + ": " + message);
+		}
+	}
+
+	protected synchronized void printMessage(String message, boolean permit) {
+		if (permit) {
+			System.out.println(message);
+		}
+	}
+
+	protected void waitFor(long time) {
+		agent.waitForDelay(time, new IComponentStep<Void>() {
+
+			@Override
+			public IFuture execute(IInternalAccess arg0) {
+				return IFuture.DONE;
+			}
+		}).get();
 	}
 
 }

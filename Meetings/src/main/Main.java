@@ -28,7 +28,7 @@ public class Main {
 				RequiredServiceInfo.SCOPE_PLATFORM).get(sus);
 
 		Map<String, Object> agParam = new HashMap<String, Object>();
-		agParam.put("index", 2);
+		agParam.put("agQty", 100);
 		new AgentDeployer(agParam, "bin/agents/ManagerBDI.class", cms).deploy();
 
 	}
