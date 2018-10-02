@@ -27,7 +27,9 @@ import util.AgentDeployer;
 import util.DirectoryFacilitator;
 
 @Agent
-@Arguments({ @Argument(name = "agQty", clazz = Integer.class) })
+@Arguments({ @Argument(name = "agent_quantity", clazz = Integer.class),
+		@Argument(name = "agent_class", clazz = String.class),
+		@Argument(name = "debug", clazz = Boolean.class) })
 public class ManagerBDI {
 	private int id[];
 	private int type[];
@@ -38,11 +40,13 @@ public class ManagerBDI {
 	private static IComponentManagementService cms;
 	private int max_generations = 1000;
 	private int curr_generation = 0;
-	private boolean debug = false;
 
 	@AgentArgument
-	private int agQty;
-
+	private int agent_quantity;
+	@AgentArgument
+	private String agent_class;
+	@AgentArgument
+	private Boolean debug;
 	@Agent
 	private IInternalAccess agent;
 
@@ -50,10 +54,10 @@ public class ManagerBDI {
 	public void created() {
 		agentName = createName(this.getClass().getName(), 0);
 		registerSelf(agentName, agent.getComponentIdentifier());
-		id = new int[agQty];
-		type = new int[agQty];
-		done = new boolean[agQty];
-		addresses = new IComponentIdentifier[agQty];
+		id = new int[agent_quantity];
+		type = new int[agent_quantity];
+		done = new boolean[agent_quantity];
+		addresses = new IComponentIdentifier[agent_quantity];
 		startHawkDove50_50();
 		start();
 	}
@@ -70,11 +74,11 @@ public class ManagerBDI {
 		ThreadSuspendable sus = new ThreadSuspendable();
 		cms = SServiceProvider.getService(agent.getServiceProvider(), IComponentManagementService.class,
 				RequiredServiceInfo.SCOPE_PLATFORM).get(sus);
-		for (int i = 0; i < agQty; i++) {
+		for (int i = 0; i < agent_quantity; i++) {
 			Map<String, Object> agParam = new HashMap<String, Object>();
 			agParam.put("type", i % 2 == 0 ? HawkDoveGame.DOVE : HawkDoveGame.HAWK);
 			agParam.put("index", i);
-			new AgentDeployer(agParam, "bin/agents/AgentBDI.class", cms).deploy();
+			new AgentDeployer(agParam, agent_class, cms).deploy();
 			type[i] = i % 2 == 0 ? HawkDoveGame.DOVE : HawkDoveGame.HAWK;
 			addresses[i] = null;
 		}
@@ -82,11 +86,11 @@ public class ManagerBDI {
 
 	public void shuffleEncounters() {
 		ArrayList<Integer> indexes = new ArrayList<>();
-		for (int i = 0; i < agQty; i++) {
+		for (int i = 0; i < agent_quantity; i++) {
 			indexes.add(i);
 		}
 		Collections.shuffle(indexes);
-		for (int i = 0; i < agQty; i++) {
+		for (int i = 0; i < agent_quantity; i++) {
 			id[i] = indexes.get(i);
 		}
 	}
@@ -98,7 +102,7 @@ public class ManagerBDI {
 		}
 		int typeHawk = 0;
 		int typeDove = 0;
-		for (int i = 0; i < agQty; i = i + 2) {
+		for (int i = 0; i < agent_quantity; i = i + 2) {
 			int p1 = id[i];
 			int p2 = id[i + 1];
 			if (type[p1] == HawkDoveGame.HAWK) {
@@ -156,7 +160,7 @@ public class ManagerBDI {
 		done[curr_index] = true;
 		type[curr_index] = curr_type;
 		Boolean all_done = true;
-		for (int i = 0; i < agQty; i++) {
+		for (int i = 0; i < agent_quantity; i++) {
 			all_done = all_done && done[i];
 		}
 		if (all_done) {
