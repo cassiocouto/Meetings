@@ -5,6 +5,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 
+import game.GenericGame;
 import game.HawkDoveGame;
 import jadex.bridge.IComponentIdentifier;
 import jadex.bridge.IComponentStep;
@@ -28,8 +29,7 @@ import util.DirectoryFacilitator;
 
 @Agent
 @Arguments({ @Argument(name = "agent_quantity", clazz = Integer.class),
-		@Argument(name = "agent_class", clazz = String.class),
-		@Argument(name = "debug", clazz = Boolean.class) })
+		@Argument(name = "agent_class", clazz = String.class), @Argument(name = "debug", clazz = Boolean.class) })
 public class ManagerBDI {
 	private int id[];
 	private int type[];
@@ -40,6 +40,7 @@ public class ManagerBDI {
 	private static IComponentManagementService cms;
 	private int max_generations = 1000;
 	private int curr_generation = 0;
+	private GenericGame model;
 
 	@AgentArgument
 	private int agent_quantity;
@@ -53,12 +54,13 @@ public class ManagerBDI {
 	@AgentCreated
 	public void created() {
 		agentName = createName(this.getClass().getName(), 0);
+		model = GenericGame.getInstance();
 		registerSelf(agentName, agent.getComponentIdentifier());
 		id = new int[agent_quantity];
 		type = new int[agent_quantity];
 		done = new boolean[agent_quantity];
 		addresses = new IComponentIdentifier[agent_quantity];
-		startHawkDove50_50();
+		startAgents();
 		start();
 	}
 
@@ -70,16 +72,34 @@ public class ManagerBDI {
 
 	}
 
-	public void startHawkDove50_50() {
+	public void startAgents() {
 		ThreadSuspendable sus = new ThreadSuspendable();
 		cms = SServiceProvider.getService(agent.getServiceProvider(), IComponentManagementService.class,
 				RequiredServiceInfo.SCOPE_PLATFORM).get(sus);
+
+		int distribution[] = new int[agent_quantity];
+		int index = 0;
+		for (int i = 0; i < model.profiles.length; i++) {
+			int threshold = (int) Math.round(model.getStrategy_proportion()[i] * agent_quantity);
+			if (i == model.profiles.length - 1) {
+				for (; index < agent_quantity; index++) {
+					distribution[index] = i;
+				}
+			} else {
+				int j = index;
+				for (; j < index + threshold; j++) {
+					distribution[j] = i;
+				}
+				index = j;
+			}
+		}
+
 		for (int i = 0; i < agent_quantity; i++) {
 			Map<String, Object> agParam = new HashMap<String, Object>();
-			agParam.put("type", i % 2 == 0 ? HawkDoveGame.DOVE : HawkDoveGame.HAWK);
+			agParam.put("type", distribution[i]);
 			agParam.put("index", i);
 			new AgentDeployer(agParam, agent_class, cms).deploy();
-			type[i] = i % 2 == 0 ? HawkDoveGame.DOVE : HawkDoveGame.HAWK;
+			type[i] = distribution[i];
 			addresses[i] = null;
 		}
 	}
