@@ -3,10 +3,12 @@ package game;
 import util.Configuration;
 
 public class GenericGame {
+	
 	public int strategy_count;
 	public String profiles[];
 	public double strategy_payoff[][];
 	public double strategy_proportion[];
+
 
 	private static GenericGame instance;
 
@@ -50,8 +52,21 @@ public class GenericGame {
 		return profiles;
 	}
 
-	public double[][] getStrategy_payoff() {
-		return strategy_payoff;
+	public double get_strategy_payoff(int my_type, int opponent_type) {
+		return strategy_payoff[my_type][opponent_type];
+	}
+
+	public int get_best_response(int opponent_type) {
+		int candidate = -1;
+		for (int i = 0; i < strategy_payoff[opponent_type].length; i++) {
+			if (strategy_payoff[opponent_type][i] < 0) {
+				candidate = i;
+				if (strategy_payoff[i][opponent_type] > 0) {
+					return candidate;
+				}
+			}
+		}
+		return opponent_type;
 	}
 
 	public double[] getStrategy_proportion() {

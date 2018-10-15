@@ -20,8 +20,9 @@ public class DirectoryFacilitator {
 
 	public synchronized void registerAgent(String agentName, IComponentIdentifier AID) {
 		this_instance.yellow_pages.put(agentName, AID);
-		System.out.println(String.format("%s just registered itself! Now the directory has %d entries", agentName,
-				this_instance.yellow_pages.keySet().size()));
+		// System.out.println(String.format("%s just registered itself! Now the
+		// directory has %d entries", agentName,
+		// this_instance.yellow_pages.keySet().size()));
 	}
 
 	public IComponentIdentifier getAgentAID(String agentName) {

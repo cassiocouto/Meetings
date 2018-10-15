@@ -21,7 +21,7 @@ public class Main {
 	private static Configuration settings;
 
 	public static void main(String[] args) throws Exception {
-		String[] defargs = new String[] { "-gui", "false", "-welcome", "true", "-cli", "false", "-printpass", "false",
+		String[] defargs = new String[] { "-gui", "false", "-welcome", "false", "-cli", "false", "-printpass", "false",
 				"-awareness", "false" };
 		IFuture<IExternalAccess> plataform = jadex.base.Starter.createPlatform(defargs);
 		ThreadSuspendable sus = new ThreadSuspendable();

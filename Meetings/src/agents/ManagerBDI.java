@@ -25,6 +25,7 @@ import jadex.micro.annotation.AgentMessageArrived;
 import jadex.micro.annotation.Argument;
 import jadex.micro.annotation.Arguments;
 import util.AgentDeployer;
+import util.Configuration;
 import util.DirectoryFacilitator;
 
 @Agent
@@ -32,7 +33,8 @@ import util.DirectoryFacilitator;
 		@Argument(name = "agent_class", clazz = String.class), @Argument(name = "debug", clazz = Boolean.class) })
 public class ManagerBDI {
 	private int id[];
-	private int type[];
+	private int census[];
+	private int type_changes[];
 	private IComponentIdentifier addresses[];
 	private boolean done[];
 	private String agentName;
@@ -52,12 +54,13 @@ public class ManagerBDI {
 	private IInternalAccess agent;
 
 	@AgentCreated
-	public void created() {
+	public void created() throws Exception {
 		agentName = createName(this.getClass().getName(), 0);
 		model = GenericGame.getInstance();
 		registerSelf(agentName, agent.getComponentIdentifier());
 		id = new int[agent_quantity];
-		type = new int[agent_quantity];
+		census = new int[agent_quantity];
+		type_changes = new int[model.strategy_count * model.strategy_count];
 		done = new boolean[agent_quantity];
 		addresses = new IComponentIdentifier[agent_quantity];
 		startAgents();
@@ -72,7 +75,7 @@ public class ManagerBDI {
 
 	}
 
-	public void startAgents() {
+	public void startAgents() throws Exception {
 		ThreadSuspendable sus = new ThreadSuspendable();
 		cms = SServiceProvider.getService(agent.getServiceProvider(), IComponentManagementService.class,
 				RequiredServiceInfo.SCOPE_PLATFORM).get(sus);
@@ -93,15 +96,19 @@ public class ManagerBDI {
 				index = j;
 			}
 		}
-
+		Configuration c = new Configuration("conf/settings.ini");
 		for (int i = 0; i < agent_quantity; i++) {
 			Map<String, Object> agParam = new HashMap<String, Object>();
 			agParam.put("type", distribution[i]);
 			agParam.put("index", i);
+			agParam.put("strategy_change_condition", c.getPropertyValue("strategy_change_condition"));
+			agParam.put("strategy_change_type", c.getPropertyValue("strategy_change_type"));
 			new AgentDeployer(agParam, agent_class, cms).deploy();
-			type[i] = distribution[i];
+			census[i] = distribution[i];
 			addresses[i] = null;
 		}
+		printMessage(getHeader(), true);
+		printMessage(getResultLine(curr_generation), true);
 	}
 
 	public void shuffleEncounters() {
@@ -120,21 +127,22 @@ public class ManagerBDI {
 			System.exit(0);
 			return;
 		}
-		int typeHawk = 0;
-		int typeDove = 0;
+		int types_count[] = new int[model.strategy_count];
+
+		for (int i = 0; i < types_count.length; i++) {
+			types_count[i] = 0;
+		}
+
 		for (int i = 0; i < agent_quantity; i = i + 2) {
 			int p1 = id[i];
 			int p2 = id[i + 1];
-			if (type[p1] == HawkDoveGame.HAWK) {
-				typeHawk++;
-			} else {
-				typeDove++;
-			}
-
-			if (type[p2] == HawkDoveGame.HAWK) {
-				typeHawk++;
-			} else {
-				typeDove++;
+			for (int j = 0; j < model.strategy_count; j++) {
+				if (census[p1] == j) {
+					types_count[j] += 1;
+				}
+				if (census[p2] == j) {
+					types_count[j] += 1;
+				}
 			}
 
 			IComponentIdentifier p1_AID = addresses[p1];
@@ -166,7 +174,6 @@ public class ManagerBDI {
 			done[p1] = false;
 			done[p2] = false;
 		}
-		printMessage(String.format("%s\t%s\t%s", curr_generation, typeHawk, typeDove), true);
 		return;
 
 	}
@@ -178,7 +185,8 @@ public class ManagerBDI {
 		int curr_index = Integer.parseInt(content[0]);
 		int curr_type = Integer.parseInt(content[1]);
 		done[curr_index] = true;
-		type[curr_index] = curr_type;
+		// census[curr_index] = curr_type;
+		registerCensus(curr_index, curr_type);
 		Boolean all_done = true;
 		for (int i = 0; i < agent_quantity; i++) {
 			all_done = all_done && done[i];
@@ -186,6 +194,7 @@ public class ManagerBDI {
 		if (all_done) {
 			printMessage("Ending this gen");
 			curr_generation++;
+			printMessage(getResultLine(curr_generation), true);
 			start();
 		}
 		return;
@@ -221,6 +230,60 @@ public class ManagerBDI {
 				return IFuture.DONE;
 			}
 		}).get();
+	}
+
+	private void registerCensus(int id, int type) {
+		int old_type = census[id];
+		registerChanges(old_type, type);
+		census[id] = type;
+	}
+
+	private int[] countCensus() {
+		int[] result = new int[model.strategy_count];
+		for (int i = 0; i < census.length; i++) {
+			result[census[i]] += 1;
+		}
+		return result;
+	}
+
+	private void resetChanges() {
+		type_changes = new int[model.strategy_count * model.strategy_count];
+		for (int i = 0; i < type_changes.length; i++) {
+			type_changes[i] = 0;
+		}
+	}
+
+	private void registerChanges(int old_type, int new_type) {
+		int index = (old_type * model.strategy_count) + new_type;
+		type_changes[index] += 1;
+	}
+
+	private String getHeader() {
+		String aux = "gen\t";
+		for (int i = 0; i < model.strategy_count; i++) {
+			aux = aux + String.format("strategy_%s\t", i);
+		}
+		for (int i = 0; i < model.strategy_count; i++) {
+			for (int j = 0; j < model.strategy_count; j++) {
+				aux = aux + String.format("change%s->%s\t", i, j);
+			}
+		}
+		aux = aux + "\n";
+		return aux;
+	}
+
+	private String getResultLine(int gen) {
+		String aux = String.format("%s\t", gen);
+		int[] result = countCensus();
+		for (int i = 0; i < model.strategy_count; i++) {
+			aux = aux + String.format("%s\t", result[i]);
+		}
+		for (int i = 0; i < type_changes.length; i++) {
+			aux = aux + String.format("%s\t", type_changes[i]);
+		}
+		aux = aux + "\n";
+		resetChanges();
+		return aux;
 	}
 
 }

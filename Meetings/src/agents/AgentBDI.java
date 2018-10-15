@@ -3,7 +3,7 @@ package agents;
 import java.util.HashMap;
 import java.util.Map;
 
-import game.HawkDoveGame;
+import game.GenericGame;
 import jadex.bdiv3.annotation.Belief;
 import jadex.bdiv3.annotation.Plan;
 import jadex.bdiv3.annotation.Trigger;
@@ -21,31 +21,45 @@ import jadex.micro.annotation.Arguments;
 import util.DirectoryFacilitator;
 
 @Agent
-@Arguments({ @Argument(name = "type", clazz = Integer.class), @Argument(name = "index", clazz = Integer.class) })
+@Arguments({ @Argument(name = "type", clazz = Integer.class), @Argument(name = "index", clazz = Integer.class),
+		@Argument(name = "strategy_change_condition", clazz = String.class),
+		@Argument(name = "strategy_change_type", clazz = String.class) })
 public class AgentBDI {
 	protected DirectoryFacilitator df;
 	private String agentName;
 	private boolean debug = false;
+	private GenericGame model;
 
 	@AgentArgument
 	private int type;
 	@AgentArgument
 	private int index;
+	@AgentArgument
+	private String strategy_change_condition;
+	@AgentArgument
+	private String strategy_change_type;
 	@Agent
 	private IInternalAccess agent;
 
 	@Belief
 	private int adversary = -1;
-
 	@Belief
-	private double acc_payoff = 0;
+	private int adversary_strategy = -1;
 
 	@Belief
 	private Double last_payoff = null;
 
+	@Belief
+	private Double strategy_acc_payoff_history[];
+
 	@AgentCreated
-	public void created() {
+	public void created() throws Exception {
 		agentName = createName(this.getClass().getName(), index);
+		model = GenericGame.getInstance();
+		strategy_acc_payoff_history = new Double[model.strategy_count];
+		for (int i = 0; i < strategy_acc_payoff_history.length; i++) {
+			strategy_acc_payoff_history[i] = 1d;
+		}
 		registerSelf(agentName, agent.getComponentIdentifier());
 	}
 
@@ -64,11 +78,11 @@ public class AgentBDI {
 		} else if (msg.get(SFipa.PERFORMATIVE) == SFipa.PROPOSE) {
 			printMessage("Received PROPOSE message from " + msg.get(SFipa.SENDER).toString());
 			IComponentIdentifier adversary_AID = (IComponentIdentifier) msg.get(SFipa.SENDER);
-			int adversary_strategy = Integer.parseInt(msg.get(SFipa.CONTENT).toString());
+			adversary_strategy = Integer.parseInt(msg.get(SFipa.CONTENT).toString());
 			if (adversary == -1) {
 				sendProposalMessage(adversary_AID);
 			}
-			last_payoff = HawkDoveGame.getPayoff(type, adversary_strategy);
+			last_payoff = model.get_strategy_payoff(type, adversary_strategy);
 			evaluate();
 			return;
 		}
@@ -97,20 +111,50 @@ public class AgentBDI {
 		printMessage("Evaluating payoff...");
 		if (last_payoff == null)
 			return;
-		acc_payoff += last_payoff;
-		if (last_payoff < 0) {
-			printMessage("I'm going to change strategies");
-			if (type == HawkDoveGame.HAWK) {
-				type = HawkDoveGame.DOVE;
-			} else {
-				type = HawkDoveGame.HAWK;
-			}
+
+		if (strategy_acc_payoff_history[type] + last_payoff >= 0) {
+			strategy_acc_payoff_history[type] += last_payoff;
+		} else {
+			strategy_acc_payoff_history[type] = 0d;
 		}
+
+		changeStrategy();
 		informManager();
 	}
 
-	private void informManager() {
+	private void changeStrategy() {
+		if ((strategy_change_condition.equalsIgnoreCase("negative_payoff") && last_payoff < 0)
+				|| (strategy_change_condition.equalsIgnoreCase("negative_zero_payoff") && last_payoff <= 0)) {
+			
+		}else {
+			return;
+		}
+		printMessage("I'm going to change strategies");
+		if (strategy_change_type.equalsIgnoreCase("best_acc_payoff")) {
+			double sum = 0;
+			for (int i = 0; i < strategy_acc_payoff_history.length; i++) {
+				if (i == type) {
+					continue;
+				}
+				sum += strategy_acc_payoff_history[i];
+			}
 
+			double random = Math.random();
+			for (int i = 0; i < strategy_acc_payoff_history.length; i++) {
+				if (i == type) {
+					continue;
+				}
+				if (random < strategy_acc_payoff_history[i] / sum) {
+					type = i;
+					return;
+				}
+			}
+		} else if (strategy_change_type.equalsIgnoreCase("revenge")) {
+			type = model.get_best_response(adversary_strategy);
+		}
+	}
+
+	private void informManager() {
 		Map<String, Object> msg = new HashMap<>();
 		msg.put(SFipa.CONTENT, index + " " + type);
 		msg.put(SFipa.PERFORMATIVE, SFipa.INFORM);
@@ -127,7 +171,6 @@ public class AgentBDI {
 		adversary = -1;
 	}
 
-	// TODO create super class with this
 	protected String createName(String classname, int id) {
 		return classname + "_" + id;
 	}
