@@ -85,6 +85,9 @@ public class AgentBDI {
 			last_payoff = model.get_strategy_payoff(type, adversary_strategy);
 			evaluate();
 			return;
+		} else if (msg.get(SFipa.PERFORMATIVE) == SFipa.PROTOCOL_RECRUITING) {
+			changeStrategy(true);
+			return;
 		}
 	}
 
@@ -123,10 +126,14 @@ public class AgentBDI {
 	}
 
 	private void changeStrategy() {
-		if ((strategy_change_condition.equalsIgnoreCase("negative_payoff") && last_payoff < 0)
+		changeStrategy(false);
+	}
+
+	private void changeStrategy(boolean inconditional_change) {
+		if (inconditional_change || (strategy_change_condition.equalsIgnoreCase("negative_payoff") && last_payoff < 0)
 				|| (strategy_change_condition.equalsIgnoreCase("negative_zero_payoff") && last_payoff <= 0)) {
-			
-		}else {
+
+		} else {
 			return;
 		}
 		printMessage("I'm going to change strategies");

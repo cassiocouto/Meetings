@@ -40,9 +40,13 @@ public class ManagerBDI {
 	private String agentName;
 	protected DirectoryFacilitator df;
 	private static IComponentManagementService cms;
-	private int max_generations = 1000;
+	private int max_generations = 100;
 	private int curr_generation = 0;
 	private GenericGame model;
+	private Configuration c;
+	private boolean will_be_mutation;
+	private int mutation_gen;
+	private int mutating_individual;
 
 	@AgentArgument
 	private int agent_quantity;
@@ -63,6 +67,10 @@ public class ManagerBDI {
 		type_changes = new int[model.strategy_count * model.strategy_count];
 		done = new boolean[agent_quantity];
 		addresses = new IComponentIdentifier[agent_quantity];
+		c = new Configuration("conf/settings.ini");
+		will_be_mutation = Boolean.parseBoolean(c.getPropertyValue("mutation"));
+		mutation_gen = Integer.parseInt(c.getPropertyValue("mutation_gen"));
+		mutating_individual = Integer.parseInt(c.getPropertyValue("mutation_gen"));
 		startAgents();
 		start();
 	}
@@ -96,7 +104,7 @@ public class ManagerBDI {
 				index = j;
 			}
 		}
-		Configuration c = new Configuration("conf/settings.ini");
+
 		for (int i = 0; i < agent_quantity; i++) {
 			Map<String, Object> agParam = new HashMap<String, Object>();
 			agParam.put("type", distribution[i]);
@@ -126,6 +134,13 @@ public class ManagerBDI {
 		if (curr_generation > max_generations) {
 			System.exit(0);
 			return;
+		} else if (curr_generation == mutation_gen && will_be_mutation) {
+			IComponentIdentifier mut_id = df.getAgentAID(createName(AgentBDI.class.getName(), mutating_individual));
+			Map<String, Object> msg = new HashMap<>();
+			msg.put(SFipa.PERFORMATIVE, SFipa.PROTOCOL_RECRUITING);
+			msg.put(SFipa.RECEIVERS, new IComponentIdentifier[] { mut_id });
+			msg.put(SFipa.SENDER, agent.getComponentIdentifier());
+			agent.getComponentFeature(IMessageFeature.class).sendMessage(msg, SFipa.FIPA_MESSAGE_TYPE);
 		}
 		int types_count[] = new int[model.strategy_count];
 
@@ -268,7 +283,6 @@ public class ManagerBDI {
 				aux = aux + String.format("change%s->%s\t", i, j);
 			}
 		}
-		aux = aux + "\n";
 		return aux;
 	}
 
@@ -281,7 +295,6 @@ public class ManagerBDI {
 		for (int i = 0; i < type_changes.length; i++) {
 			aux = aux + String.format("%s\t", type_changes[i]);
 		}
-		aux = aux + "\n";
 		resetChanges();
 		return aux;
 	}
